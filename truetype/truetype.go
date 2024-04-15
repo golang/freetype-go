@@ -19,7 +19,6 @@ package truetype // import "github.com/golang/freetype/truetype"
 
 import (
 	"fmt"
-
 	"golang.org/x/image/math/fixed"
 )
 
@@ -141,18 +140,21 @@ func parseSubtables(table []byte, name string, offset, size int, pred func([]byt
 		// We read the 16-bit Platform ID and 16-bit Platform Specific ID as a single uint32.
 		// All values are big-endian.
 		pidPsid := u32(table, offset)
-		// We prefer the Unicode cmap encoding. Failing to find that, we fall
-		// back onto the Microsoft cmap encoding.
-		if pidPsid == unicodeEncodingBMPOnly || pidPsid == unicodeEncodingFull {
+		// In order of preference, we prefer the Unicode Full encoding,
+		// Unicode BMPOnly encoding, then any Microsoft encoding.
+		switch pidPsid {
+		case unicodeEncodingFull:
 			bestOffset, bestPID, ok = offset, pidPsid>>16, true
 			break
-
-		} else if pidPsid == microsoftSymbolEncoding ||
-			pidPsid == microsoftUCS2Encoding ||
-			pidPsid == microsoftUCS4Encoding {
-
+		case unicodeEncodingBMPOnly:
 			bestOffset, bestPID, ok = offset, pidPsid>>16, true
-			// We don't break out of the for loop, so that Unicode can override Microsoft.
+			// We don't break out of the for loop, so that Full can override BMPOnly
+		case microsoftSymbolEncoding, microsoftUCS2Encoding, microsoftUCS4Encoding:
+			if !ok || bestPID != 0 {
+				// Only use if current best is not found or Microsoft
+				bestOffset, bestPID, ok = offset, pidPsid>>16, true
+				// We don't break out of the for loop, so that Unicode can override Microsoft.
+			}
 		}
 	}
 	if !ok {
